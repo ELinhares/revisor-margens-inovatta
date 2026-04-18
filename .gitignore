@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+*.json
+!package.json
+!lifecycle.json
+*.pem
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+frontend/.streamlit/secrets.toml
