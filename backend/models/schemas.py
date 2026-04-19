@@ -17,6 +17,8 @@ class ProcessingSummary(BaseModel):
 
 class ValidateResponse(BaseModel):
     status: str
+    all_columns: list[str]
+    inferred_mapping: dict[str, Optional[str]]
     columns_found: list[str]
     missing_columns: list[str]
     total_rows: int

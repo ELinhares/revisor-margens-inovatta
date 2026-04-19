@@ -1,3 +1,4 @@
+import json
 import requests
 import streamlit as st
 
@@ -30,9 +31,9 @@ st.markdown('<hr class="inovatta-divider" />', unsafe_allow_html=True)
 if not client_ok:
     st.info("Preencha o CNPJ e a Razão Social para prosseguir com o upload do arquivo.")
 else:
-    file_bytes, validation_info = render_file_uploader()
+    file_bytes, validation_info, column_mapping = render_file_uploader()
 
-    if file_bytes is not None and validation_info is not None:
+    if file_bytes is not None and validation_info is not None and column_mapping is not None:
         st.markdown('<hr class="inovatta-divider" />', unsafe_allow_html=True)
         st.subheader("4. Confirmar e Calcular")
 
@@ -59,6 +60,7 @@ else:
                             "max_increase_a": str(max_increases["A"]),
                             "max_increase_b": str(max_increases["B"]),
                             "max_increase_c": str(max_increases["C"]),
+                            "column_mapping_json": json.dumps(column_mapping),
                         },
                         files={"file": ("arquivo.xlsx", file_bytes, "application/octet-stream")},
                         timeout=120,

@@ -3,36 +3,131 @@ from io import BytesIO
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-REQUIRED_COLUMNS = ["Código do Produto", "Venda (R$)", "Margem Atual"]
+REQUIRED_COLUMNS = ["Código do Produto", "Produto", "Venda (R$)", "Margem Atual"]
 
+# Known aliases → canonical required column name
 COLUMN_ALIASES = {
     "Produto (descrição)": "Produto",
     "Produto (Descrição)": "Produto",
     "produto": "Produto",
     "Descrição": "Produto",
+    "Descricao": "Produto",
     "descricao": "Produto",
+    "Descrição do Produto": "Produto",
+    "Nome do Produto": "Produto",
     "codigo": "Código do Produto",
+    "Codigo": "Código do Produto",
     "Codigo do Produto": "Código do Produto",
+    "Cod. Produto": "Código do Produto",
+    "Cód. Produto": "Código do Produto",
     "Código": "Código do Produto",
+    "COD": "Código do Produto",
+    "SKU": "Código do Produto",
+    "Ref": "Código do Produto",
+    "Referência": "Código do Produto",
     "venda": "Venda (R$)",
     "Venda": "Venda (R$)",
+    "Vendas": "Venda (R$)",
     "Receita": "Venda (R$)",
+    "Faturamento": "Venda (R$)",
+    "Fat.": "Venda (R$)",
+    "Valor Vendido": "Venda (R$)",
+    "Total Vendido": "Venda (R$)",
     "margem": "Margem Atual",
     "Margem": "Margem Atual",
     "Margem (%)": "Margem Atual",
+    "Margem%": "Margem Atual",
+    "MG": "Margem Atual",
+    "Mg.": "Margem Atual",
+    "Margem de Contribuição": "Margem Atual",
 }
 
-ALL_REQUIRED = REQUIRED_COLUMNS + ["Produto"]
+
+def _fuzzy_match(col: str) -> str | None:
+    """Infer required column from column name using keyword heuristics."""
+    c = col.lower().strip()
+    if any(k in c for k in ["cód", "cod", "código", "codigo", "ref", "sku", "item"]):
+        return "Código do Produto"
+    if any(k in c for k in ["prod", "desc", "nome", "item", "mercad"]):
+        return "Produto"
+    if any(k in c for k in ["vend", "receita", "fatur", "valor", "total"]):
+        return "Venda (R$)"
+    if any(k in c for k in ["margem", "margin", " mg", "lucro", "contrib"]):
+        return "Margem Atual"
+    return None
 
 
-def validate_and_read(file_bytes: bytes) -> pd.DataFrame:
+def _infer_mapping(columns: list[str]) -> dict[str, str | None]:
+    """Return {file_col: required_col_or_None} for every column in the file."""
+    result: dict[str, str | None] = {}
+    assigned: set[str] = set()
+
+    for col in columns:
+        # 1. Exact match with required
+        if col in REQUIRED_COLUMNS:
+            result[col] = col
+            assigned.add(col)
+        # 2. Known alias
+        elif col in COLUMN_ALIASES:
+            target = COLUMN_ALIASES[col]
+            if target not in assigned:
+                result[col] = target
+                assigned.add(target)
+            else:
+                result[col] = None
+        # 3. Fuzzy heuristic
+        else:
+            target = _fuzzy_match(col)
+            if target and target not in assigned:
+                result[col] = target
+                assigned.add(target)
+            else:
+                result[col] = None
+
+    return result
+
+
+def check_columns(file_bytes: bytes) -> dict:
+    """Return full column info: all columns, inferred mapping, validation status."""
+    df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
+    all_columns = [str(c).strip() for c in df.columns]
+
+    inferred = _infer_mapping(all_columns)
+    mapped_required = {v for v in inferred.values() if v}
+
+    found = [c for c in REQUIRED_COLUMNS if c in mapped_required]
+    missing = [c for c in REQUIRED_COLUMNS if c not in mapped_required]
+
+    # Build preview using inferred mapping
+    df.columns = all_columns
+    df_preview = df.rename(columns={k: v for k, v in inferred.items() if v})
+    preview_cols = [c for c in REQUIRED_COLUMNS if c in df_preview.columns]
+    preview = df_preview[preview_cols].head(5).fillna("").to_dict(orient="records")
+
+    return {
+        "all_columns": all_columns,
+        "inferred_mapping": inferred,
+        "columns_found": found,
+        "missing_columns": missing,
+        "total_rows": len(df),
+        "preview": preview,
+    }
+
+
+def validate_and_read(
+    file_bytes: bytes,
+    column_mapping: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """Read Excel and rename columns according to mapping (or aliases if no mapping given)."""
     df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Apply aliases
-    df.rename(columns=COLUMN_ALIASES, inplace=True)
+    if column_mapping:
+        df.rename(columns={k: v for k, v in column_mapping.items() if v}, inplace=True)
+    else:
+        df.rename(columns=COLUMN_ALIASES, inplace=True)
 
-    missing = [c for c in ALL_REQUIRED if c not in df.columns]
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
 
@@ -40,26 +135,6 @@ def validate_and_read(file_bytes: bytes) -> pd.DataFrame:
     df["Margem Atual"] = pd.to_numeric(df["Margem Atual"], errors="coerce").fillna(0.0)
 
     return df.copy()
-
-
-def check_columns(file_bytes: bytes) -> dict:
-    """Return column validation info without raising."""
-    df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
-    df.columns = [str(c).strip() for c in df.columns]
-    df.rename(columns=COLUMN_ALIASES, inplace=True)
-
-    found = [c for c in ALL_REQUIRED if c in df.columns]
-    missing = [c for c in ALL_REQUIRED if c not in df.columns]
-
-    preview_cols = [c for c in ALL_REQUIRED if c in df.columns]
-    preview = df[preview_cols].head(5).fillna("").to_dict(orient="records")
-
-    return {
-        "columns_found": found,
-        "missing_columns": missing,
-        "total_rows": len(df),
-        "preview": preview,
-    }
 
 
 def write_excel(df: pd.DataFrame) -> bytes:
@@ -83,7 +158,6 @@ def write_excel(df: pd.DataFrame) -> bytes:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
 
-        # Format data rows
         for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
             for cell in row:
                 col_name = final_cols[cell.column - 1] if cell.column <= len(final_cols) else ""
@@ -92,7 +166,6 @@ def write_excel(df: pd.DataFrame) -> bytes:
                 elif col_name in ("Margem Atual", "Margem Sugerida"):
                     cell.number_format = '0.00"%"'
 
-        # Auto-fit column widths
         for col_idx, col_name in enumerate(final_cols, start=1):
             max_len = max(
                 len(str(col_name)),

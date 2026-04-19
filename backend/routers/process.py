@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -21,7 +22,7 @@ async def validate_file(file: UploadFile = File(...)) -> ValidateResponse:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Erro ao ler o arquivo: {exc}")
 
-    status = "ok" if not info["missing_columns"] else "erro"
+    status = "ok" if not info["missing_columns"] else "incompleto"
     return ValidateResponse(status=status, **info)
 
 
@@ -34,6 +35,7 @@ async def process_file(
     max_increase_a: float = Form(...),
     max_increase_b: float = Form(...),
     max_increase_c: float = Form(...),
+    column_mapping_json: str = Form("{}"),
     file: UploadFile = File(...),
 ) -> ProcessResponse:
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -42,9 +44,14 @@ async def process_file(
     file_bytes = await file.read()
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
 
-    # 1. Read and validate
     try:
-        df = validate_and_read(file_bytes)
+        column_mapping = json.loads(column_mapping_json) if column_mapping_json else {}
+    except json.JSONDecodeError:
+        column_mapping = {}
+
+    # 1. Read and validate with user-confirmed mapping
+    try:
+        df = validate_and_read(file_bytes, column_mapping=column_mapping or None)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -60,14 +67,13 @@ async def process_file(
     }
     df_result, achieved_wam, warning = optimize_margins(df, desired_margin_increase, max_increases)
 
-    total_sales = df_result[df_result["ABC"].isin(["A+", "A", "B", "C"])]["Venda (R$)"].sum()
+    classified = df_result[df_result["ABC"].isin(["A+", "A", "B", "C"])]
+    total_sales = classified["Venda (R$)"].sum()
     current_wam = (
-        (df_result[df_result["ABC"].isin(["A+", "A", "B", "C"])]["Venda (R$)"]
-         * df_result[df_result["ABC"].isin(["A+", "A", "B", "C"])]["Margem Atual"]).sum()
-        / total_sales if total_sales > 0 else 0.0
+        (classified["Venda (R$)"] * classified["Margem Atual"]).sum() / total_sales
+        if total_sales > 0 else 0.0
     )
     target_wam = current_wam + desired_margin_increase
-
     summary_data = compute_summary(df_result, current_wam, target_wam, achieved_wam)
 
     # 4. Write Excel output
