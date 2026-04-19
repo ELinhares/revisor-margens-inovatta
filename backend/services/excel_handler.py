@@ -118,14 +118,22 @@ def validate_and_read(
     file_bytes: bytes,
     column_mapping: dict[str, str] | None = None,
 ) -> pd.DataFrame:
-    """Read Excel and rename columns according to mapping (or aliases if no mapping given)."""
+    """Read Excel and rename columns according to mapping (or auto-infer if none given)."""
     df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
     df.columns = [str(c).strip() for c in df.columns]
 
     if column_mapping:
+        # Use user-confirmed mapping from the UI
         df.rename(columns={k: v for k, v in column_mapping.items() if v}, inplace=True)
     else:
+        # Auto mode: apply known aliases first
         df.rename(columns=COLUMN_ALIASES, inplace=True)
+        # Then apply fuzzy inference for any required columns still missing
+        still_missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+        if still_missing:
+            inferred = _infer_mapping(list(df.columns))
+            fallback = {k: v for k, v in inferred.items() if v in still_missing}
+            df.rename(columns=fallback, inplace=True)
 
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
