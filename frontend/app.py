@@ -10,7 +10,7 @@ from components.file_uploader import render_file_uploader
 from components.results import render_results
 
 st.set_page_config(
-    page_title="Revisor de Margens Inovatta",
+    page_title="Revisor de Margens Inovatta v1.3.0",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
