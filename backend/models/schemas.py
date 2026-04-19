@@ -21,6 +21,7 @@ class ValidateResponse(BaseModel):
     inferred_mapping: dict[str, Optional[str]]
     columns_found: list[str]
     missing_columns: list[str]
+    margin_format: str          # "percent" | "decimal"
     total_rows: int
     preview: list[dict]
 

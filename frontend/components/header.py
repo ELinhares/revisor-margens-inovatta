@@ -1,6 +1,8 @@
 import os
 import streamlit as st
 
+APP_VERSION = "1.2.0"
+
 INOVATTA_CSS = """
 <style>
     :root {
@@ -12,17 +14,11 @@ INOVATTA_CSS = """
         --border:  #C8D8F0;
     }
 
-    .stApp {
-        background-color: var(--bg);
-    }
+    .stApp { background-color: var(--bg); }
 
-    section[data-testid="stSidebar"] {
-        background-color: #EBF2FF;
-    }
+    section[data-testid="stSidebar"] { background-color: #EBF2FF; }
 
-    h1, h2, h3 {
-        color: var(--primary) !important;
-    }
+    h1, h2, h3 { color: var(--primary) !important; }
 
     .stButton > button[kind="primary"] {
         background-color: var(--primary) !important;
@@ -33,34 +29,28 @@ INOVATTA_CSS = """
         padding: 0.5rem 1.5rem !important;
         transition: background-color 0.2s ease;
     }
-
     .stButton > button[kind="primary"]:hover {
         background-color: var(--accent) !important;
     }
-
     .stButton > button[kind="secondary"] {
         border: 2px solid var(--primary) !important;
         color: var(--primary) !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
     }
-
     .stDataFrame {
         border: 1px solid var(--border) !important;
         border-radius: 6px !important;
     }
-
     .stNumberInput > div > div > input,
     .stTextInput > div > div > input {
         border-color: var(--border) !important;
     }
-
     .stNumberInput > div > div > input:focus,
     .stTextInput > div > div > input:focus {
         border-color: var(--primary) !important;
         box-shadow: 0 0 0 2px rgba(0, 87, 184, 0.2) !important;
     }
-
     .metric-card {
         background: var(--card-bg);
         border-left: 4px solid var(--primary);
@@ -69,7 +59,6 @@ INOVATTA_CSS = """
         margin: 0.5rem 0;
         box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
-
     .metric-card h4 {
         margin: 0 0 0.25rem 0;
         font-size: 0.85rem;
@@ -77,36 +66,41 @@ INOVATTA_CSS = """
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
-
     .metric-card p {
         margin: 0;
         font-size: 1.4rem;
         font-weight: 700;
         color: var(--primary);
     }
-
-    .status-ok {
-        color: #16a34a;
-        font-weight: 600;
-    }
-
-    .status-error {
-        color: #dc2626;
-        font-weight: 600;
-    }
-
-    .abc-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-weight: 700;
-        font-size: 0.85rem;
-    }
-
+    .status-ok   { color: #16a34a; font-weight: 600; }
+    .status-error { color: #dc2626; font-weight: 600; }
     hr.inovatta-divider {
         border: none;
         border-top: 2px solid var(--border);
         margin: 1.5rem 0;
+    }
+    .app-version {
+        position: fixed;
+        top: 0.6rem;
+        right: 1rem;
+        font-size: 0.72rem;
+        color: #999;
+        z-index: 9999;
+        pointer-events: none;
+    }
+    .mapping-table-header {
+        background: #0057B8;
+        color: white;
+        font-weight: 700;
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 5px 5px 0 0;
+    }
+    .mapping-row {
+        background: white;
+        border-bottom: 1px solid #e5eaf3;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.875rem;
     }
 </style>
 """
@@ -114,6 +108,12 @@ INOVATTA_CSS = """
 
 def render_header():
     st.markdown(INOVATTA_CSS, unsafe_allow_html=True)
+
+    # Version badge — fixed top-right
+    st.markdown(
+        f'<div class="app-version">v{APP_VERSION}</div>',
+        unsafe_allow_html=True,
+    )
 
     logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "logo_inovatta.png")
     logo_path = os.path.normpath(logo_path)

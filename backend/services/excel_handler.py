@@ -5,7 +5,6 @@ from openpyxl.utils import get_column_letter
 
 REQUIRED_COLUMNS = ["Código do Produto", "Produto", "Venda (R$)", "Margem Atual"]
 
-# Known aliases → canonical required column name
 COLUMN_ALIASES = {
     "Produto (descrição)": "Produto",
     "Produto (Descrição)": "Produto",
@@ -44,9 +43,8 @@ COLUMN_ALIASES = {
 
 
 def _fuzzy_match(col: str) -> str | None:
-    """Infer required column from column name using keyword heuristics."""
     c = col.lower().strip()
-    if any(k in c for k in ["cód", "cod", "código", "codigo", "ref", "sku", "item"]):
+    if any(k in c for k in ["cód", "cod", "código", "codigo", "ref", "sku"]):
         return "Código do Produto"
     if any(k in c for k in ["prod", "desc", "nome", "item", "mercad"]):
         return "Produto"
@@ -58,16 +56,12 @@ def _fuzzy_match(col: str) -> str | None:
 
 
 def _infer_mapping(columns: list[str]) -> dict[str, str | None]:
-    """Return {file_col: required_col_or_None} for every column in the file."""
     result: dict[str, str | None] = {}
     assigned: set[str] = set()
-
     for col in columns:
-        # 1. Exact match with required
         if col in REQUIRED_COLUMNS:
             result[col] = col
             assigned.add(col)
-        # 2. Known alias
         elif col in COLUMN_ALIASES:
             target = COLUMN_ALIASES[col]
             if target not in assigned:
@@ -75,7 +69,6 @@ def _infer_mapping(columns: list[str]) -> dict[str, str | None]:
                 assigned.add(target)
             else:
                 result[col] = None
-        # 3. Fuzzy heuristic
         else:
             target = _fuzzy_match(col)
             if target and target not in assigned:
@@ -83,14 +76,27 @@ def _infer_mapping(columns: list[str]) -> dict[str, str | None]:
                 assigned.add(target)
             else:
                 result[col] = None
-
     return result
 
 
+def _detect_margin_format(series: pd.Series) -> str:
+    """Return 'decimal' if values look like 0.XX form, 'percent' otherwise.
+
+    Heuristic: if the 75th percentile of absolute non-zero values is < 1.5,
+    the column is almost certainly in decimal form (e.g. 0.185 = 18.5%).
+    """
+    valid = pd.to_numeric(series, errors="coerce").dropna()
+    valid = valid[valid != 0]
+    if len(valid) == 0:
+        return "percent"
+    p75 = valid.abs().quantile(0.75)
+    return "decimal" if p75 < 1.5 else "percent"
+
+
 def check_columns(file_bytes: bytes) -> dict:
-    """Return full column info: all columns, inferred mapping, validation status."""
     df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
     all_columns = [str(c).strip() for c in df.columns]
+    df.columns = all_columns
 
     inferred = _infer_mapping(all_columns)
     mapped_required = {v for v in inferred.values() if v}
@@ -98,8 +104,15 @@ def check_columns(file_bytes: bytes) -> dict:
     found = [c for c in REQUIRED_COLUMNS if c in mapped_required]
     missing = [c for c in REQUIRED_COLUMNS if c not in mapped_required]
 
-    # Build preview using inferred mapping
-    df.columns = all_columns
+    # Detect margin format using inferred margem column
+    margin_col_in_file = next(
+        (k for k, v in inferred.items() if v == "Margem Atual"), None
+    )
+    if margin_col_in_file and margin_col_in_file in df.columns:
+        margin_format = _detect_margin_format(df[margin_col_in_file])
+    else:
+        margin_format = "percent"
+
     df_preview = df.rename(columns={k: v for k, v in inferred.items() if v})
     preview_cols = [c for c in REQUIRED_COLUMNS if c in df_preview.columns]
     preview = df_preview[preview_cols].head(5).fillna("").to_dict(orient="records")
@@ -109,6 +122,7 @@ def check_columns(file_bytes: bytes) -> dict:
         "inferred_mapping": inferred,
         "columns_found": found,
         "missing_columns": missing,
+        "margin_format": margin_format,
         "total_rows": len(df),
         "preview": preview,
     }
@@ -118,17 +132,13 @@ def validate_and_read(
     file_bytes: bytes,
     column_mapping: dict[str, str] | None = None,
 ) -> pd.DataFrame:
-    """Read Excel and rename columns according to mapping (or auto-infer if none given)."""
     df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
     df.columns = [str(c).strip() for c in df.columns]
 
     if column_mapping:
-        # Use user-confirmed mapping from the UI
         df.rename(columns={k: v for k, v in column_mapping.items() if v}, inplace=True)
     else:
-        # Auto mode: apply known aliases first
         df.rename(columns=COLUMN_ALIASES, inplace=True)
-        # Then apply fuzzy inference for any required columns still missing
         still_missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
         if still_missing:
             inferred = _infer_mapping(list(df.columns))
@@ -142,12 +152,15 @@ def validate_and_read(
     df["Venda (R$)"] = pd.to_numeric(df["Venda (R$)"], errors="coerce").fillna(0.0)
     df["Margem Atual"] = pd.to_numeric(df["Margem Atual"], errors="coerce").fillna(0.0)
 
+    # Auto-convert decimal margin to percent (e.g. 0.185 → 18.5)
+    if _detect_margin_format(df["Margem Atual"]) == "decimal":
+        df["Margem Atual"] = df["Margem Atual"] * 100
+
     return df.copy()
 
 
 def write_excel(df: pd.DataFrame) -> bytes:
     output = BytesIO()
-
     col_order = ["Código do Produto", "Produto", "Venda (R$)", "Margem Atual", "ABC", "Margem Sugerida"]
     extra = [c for c in df.columns if c not in col_order]
     final_cols = [c for c in col_order if c in df.columns] + extra

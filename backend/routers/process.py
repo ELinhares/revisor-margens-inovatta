@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -9,6 +10,10 @@ from services.gcs_service import upload_file
 from services.margin_optimizer import compute_summary, optimize_margins
 
 router = APIRouter()
+
+
+def _clean_cnpj(cnpj: str) -> str:
+    return re.sub(r"[^\d]", "", cnpj)
 
 
 @router.post("/validate", response_model=ValidateResponse)
@@ -42,23 +47,25 @@ async def process_file(
         raise HTTPException(status_code=422, detail="O arquivo deve ser no formato Excel (.xlsx ou .xls).")
 
     file_bytes = await file.read()
+    cnpj_clean = _clean_cnpj(cnpj)
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+
+    # Filenames: {cnpj}_{timestamp}_original.xlsx
+    filename_original = f"{cnpj_clean}_{timestamp}_original.xlsx"
+    filename_processed = f"{cnpj_clean}_{timestamp}_processed.xlsx"
 
     try:
         column_mapping = json.loads(column_mapping_json) if column_mapping_json else {}
     except json.JSONDecodeError:
         column_mapping = {}
 
-    # 1. Read and validate with user-confirmed mapping
     try:
         df = validate_and_read(file_bytes, column_mapping=column_mapping or None)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # 2. Classify ABC
     df = classify_abc(df)
 
-    # 3. Optimize margins
     max_increases = {
         "A+": max_increase_aplus,
         "A": max_increase_a,
@@ -76,13 +83,15 @@ async def process_file(
     target_wam = current_wam + desired_margin_increase
     summary_data = compute_summary(df_result, current_wam, target_wam, achieved_wam)
 
-    # 4. Write Excel output
     processed_bytes = write_excel(df_result)
 
-    # 5. Upload to GCS
     try:
-        original_uri, _ = upload_file(file_bytes, cnpj, razao_social, "original.xlsx", timestamp)
-        processed_uri, signed_url = upload_file(processed_bytes, cnpj, razao_social, "processed.xlsx", timestamp)
+        original_uri, _ = upload_file(
+            file_bytes, cnpj, razao_social, filename_original, timestamp
+        )
+        processed_uri, signed_url = upload_file(
+            processed_bytes, cnpj, razao_social, filename_processed, timestamp
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar no Cloud Storage: {exc}")
 

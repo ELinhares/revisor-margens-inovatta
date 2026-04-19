@@ -20,8 +20,11 @@ def upload_file(
     filename: str,
     timestamp: str,
 ) -> tuple[str, str]:
-    """Upload file to GCS and return (gs_uri, signed_url)."""
-    # Use Compute Engine credentials with IAM signing (works on Cloud Run)
+    """Upload file to GCS and return (gs_uri, signed_url).
+
+    Blob path: {cnpj_digits}/{filename}
+    where filename is already formatted as {cnpj}_{timestamp}_*.xlsx by the caller.
+    """
     auth_request = google_requests.Request()
     credentials = compute_engine.Credentials()
     credentials.refresh(auth_request)
@@ -30,7 +33,7 @@ def upload_file(
     bucket = client.bucket(BUCKET_NAME)
 
     cnpj_clean = _clean_cnpj(cnpj)
-    blob_path = f"{cnpj_clean}/{timestamp}/{filename}"
+    blob_path = f"{cnpj_clean}/{filename}"
     blob = bucket.blob(blob_path)
 
     blob.metadata = {
@@ -41,7 +44,6 @@ def upload_file(
     blob.upload_from_string(file_bytes, content_type=CONTENT_TYPE)
 
     gs_uri = f"gs://{BUCKET_NAME}/{blob_path}"
-    # Generate signed URL using IAM signing — required for Cloud Run (no private key)
     signed_url = blob.generate_signed_url(
         version="v4",
         expiration=timedelta(hours=1),
