@@ -41,6 +41,7 @@ async def process_file(
     max_increase_b: float = Form(...),
     max_increase_c: float = Form(...),
     column_mapping_json: str = Form("{}"),
+    margin_format: str = Form("auto"),
     file: UploadFile = File(...),
 ) -> ProcessResponse:
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -60,7 +61,11 @@ async def process_file(
         column_mapping = {}
 
     try:
-        df = validate_and_read(file_bytes, column_mapping=column_mapping or None)
+        df = validate_and_read(
+            file_bytes,
+            column_mapping=column_mapping or None,
+            margin_format=margin_format if margin_format != "auto" else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

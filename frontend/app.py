@@ -61,6 +61,7 @@ else:
                             "max_increase_b": str(max_increases["B"]),
                             "max_increase_c": str(max_increases["C"]),
                             "column_mapping_json": json.dumps(column_mapping),
+                            "margin_format": validation_info.get("margin_format", "auto"),
                         },
                         files={"file": ("arquivo.xlsx", file_bytes, "application/octet-stream")},
                         timeout=120,

@@ -131,6 +131,7 @@ def check_columns(file_bytes: bytes) -> dict:
 def validate_and_read(
     file_bytes: bytes,
     column_mapping: dict[str, str] | None = None,
+    margin_format: str | None = None,
 ) -> pd.DataFrame:
     df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
     df.columns = [str(c).strip() for c in df.columns]
@@ -152,8 +153,9 @@ def validate_and_read(
     df["Venda (R$)"] = pd.to_numeric(df["Venda (R$)"], errors="coerce").fillna(0.0)
     df["Margem Atual"] = pd.to_numeric(df["Margem Atual"], errors="coerce").fillna(0.0)
 
-    # Auto-convert decimal margin to percent (e.g. 0.185 → 18.5)
-    if _detect_margin_format(df["Margem Atual"]) == "decimal":
+    # Use the format detected during /validate if provided; otherwise re-detect
+    fmt = margin_format if margin_format in ("decimal", "percent") else _detect_margin_format(df["Margem Atual"])
+    if fmt == "decimal":
         df["Margem Atual"] = df["Margem Atual"] * 100
 
     return df.copy()
