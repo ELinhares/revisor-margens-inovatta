@@ -80,13 +80,10 @@ INOVATTA_CSS = """
         margin: 1.5rem 0;
     }
     .app-version {
-        position: fixed;
-        top: 0.6rem;
-        right: 1rem;
         font-size: 0.72rem;
-        color: #999;
-        z-index: 9999;
-        pointer-events: none;
+        color: #aaa;
+        text-align: right;
+        padding-top: 0.6rem;
     }
     .mapping-table-header {
         background: #0057B8;
@@ -109,16 +106,10 @@ INOVATTA_CSS = """
 def render_header():
     st.markdown(INOVATTA_CSS, unsafe_allow_html=True)
 
-    # Version badge — fixed top-right
-    st.markdown(
-        f'<div class="app-version">v{APP_VERSION}</div>',
-        unsafe_allow_html=True,
-    )
-
     logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "logo_inovatta.png")
     logo_path = os.path.normpath(logo_path)
 
-    col_logo, col_title = st.columns([1, 4])
+    col_logo, col_title, col_version = st.columns([1, 4, 1])
     with col_logo:
         if os.path.exists(logo_path):
             st.image(logo_path, width=150)
@@ -138,6 +129,12 @@ def render_header():
                 </p>
             </div>
             """,
+            unsafe_allow_html=True,
+        )
+
+    with col_version:
+        st.markdown(
+            f'<div class="app-version">v{APP_VERSION}</div>',
             unsafe_allow_html=True,
         )
 
