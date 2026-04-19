@@ -79,13 +79,20 @@ def _infer_mapping(columns: list[str]) -> dict[str, str | None]:
     return result
 
 
+def _strip_percent(series: pd.Series) -> pd.Series:
+    """Remove % character and strip whitespace from string values in a series."""
+    if series.dtype == object:
+        return series.astype(str).str.replace("%", "", regex=False).str.strip()
+    return series
+
+
 def _detect_margin_format(series: pd.Series) -> str:
     """Return 'decimal' if values look like 0.XX form, 'percent' otherwise.
 
     Heuristic: if the 75th percentile of absolute non-zero values is < 1.5,
     the column is almost certainly in decimal form (e.g. 0.185 = 18.5%).
     """
-    valid = pd.to_numeric(series, errors="coerce").dropna()
+    valid = pd.to_numeric(_strip_percent(series), errors="coerce").dropna()
     valid = valid[valid != 0]
     if len(valid) == 0:
         return "percent"
@@ -151,7 +158,7 @@ def validate_and_read(
         raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
 
     df["Venda (R$)"] = pd.to_numeric(df["Venda (R$)"], errors="coerce").fillna(0.0)
-    df["Margem Atual"] = pd.to_numeric(df["Margem Atual"], errors="coerce").fillna(0.0)
+    df["Margem Atual"] = pd.to_numeric(_strip_percent(df["Margem Atual"]), errors="coerce").fillna(0.0)
 
     # Use the format detected during /validate if provided; otherwise re-detect
     fmt = margin_format if margin_format in ("decimal", "percent") else _detect_margin_format(df["Margem Atual"])
