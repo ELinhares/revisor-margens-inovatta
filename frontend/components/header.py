@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 INOVATTA_CSS = """
 <style>
@@ -80,10 +80,15 @@ INOVATTA_CSS = """
         margin: 1.5rem 0;
     }
     .app-version {
-        font-size: 0.72rem;
-        color: #aaa;
-        text-align: right;
-        padding-top: 0.6rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #ffffff;
+        background-color: #0057B8;
+        text-align: center;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        display: inline-block;
+        margin-top: 0.5rem;
     }
     .mapping-table-header {
         background: #0057B8;
@@ -134,7 +139,9 @@ def render_header():
 
     with col_version:
         st.markdown(
-            f'<div class="app-version">v{APP_VERSION}</div>',
+            f'<div style="text-align:right;padding-top:0.4rem;">'
+            f'<span class="app-version">v{APP_VERSION}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
